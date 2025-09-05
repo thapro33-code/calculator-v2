@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculator</title>
+    <style>
+      body {
+        background: linear-gradient(120deg, #23272f 0%, #23272f 100%);
+        font-family: 'Segoe UI', Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        user-select: none; /* Prevent selecting interface */
+      }
+      .calculator-container {
+        max-width: 340px;
+        margin: 40px auto;
+        padding: 18px 12px 24px 12px;
+        border-radius: 18px;
+        box-shadow: 0 8px 32px #0008;
+        background: #181a20;
+        user-select: none; /* Prevent selecting interface */
+      }
+      h2, .display, .history, .button-grid, button {
+        user-select: none; /* Prevent selecting interface */
+      }
+      h2 {
+        text-align: center;
+        color: #f7f7f7;
+        margin-bottom: 18px;
+        font-weight: 600;
+        letter-spacing: 1px;
+      }
+      .display {
+        background: #23272f;
+        color: #f7f7f7;
+        font-size: 1.5em;
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 16px;
+        text-align: right;
+        min-height: 2em;
+        box-shadow: 0 2px 8px #0004;
+        font-family: 'Consolas', monospace;
+        overflow-x: auto;      /* Enable horizontal scrolling */
+        white-space: nowrap;   /* Prevent wrapping */
+      }
+      .history {
+        background: #23272f;
+        color: #ffe066;
+        font-size: 0.95em;
+        border-radius: 8px;
+        padding: 8px;
+        margin-bottom: 10px;
+        min-height: 1.5em;
+        font-family: 'Consolas', monospace;
+        max-height: 60px;
+        overflow-y: auto;
+      }
+      .button-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 8px;
+      }
+      .calc-btn {
+        padding: 16px 0;
+        font-size: 1.1em;
+        font-weight: bold;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background 0.2s, color 0.2s;
+        background: #23272f;
+        color: #f7f7f7;
+        box-shadow: 0 2px 6px #0003;
+      }
+      .calc-btn:disabled {
+        background: #23272f;
+        color: inherit;
+        opacity: 1;
+        cursor: not-allowed; /* Blocking cursor for disabled buttons */
+        border: none;
+        pointer-events: auto; /* Allow pointer events so cursor shows */
+      }
+      .btn-op { color: #ffe066 !important; }
+      .btn-func { color: #6cf7c7 !important; }
+      .btn-ac { background: #ff4d4d; color: #fff; }
+      .btn-ac:hover { background: #d93636; }
+      .btn-eq { background: #6c63ff; color: #fff; }
+      .btn-eq:hover { background: #5548c8; }
+      .btn-num { background: #23272f; color: #f7f7f7; }
+      .btn-num:hover { background: #2e3240; color: #ffe066; }
+      /* Restore hover color for operators and functions even when disabled */
+      .btn-op:hover,
+      .btn-func:hover {
+        background: #2e3240;
+        filter: brightness(1.1);
+      }
+      /* Prevent pointer events for disabled buttons but keep hover style */
+      .calc-btn:disabled:hover {
+        background: #23272f;
+        color: inherit;
+        filter: none;
+      }
+    </style>
+</head>
+<body>
+    <div class="calculator-container" role="region" aria-label="Calculator">
+        <h2>Calculator</h2>
+        <div style="display: flex; align-items: center; margin-bottom: 10px;">
+          <div id="history" class="history" aria-live="polite" style="flex: 1;"></div>
+          <button class="calc-btn btn-ac" style="width:auto;min-width:60px;padding:6px 0 6px 0;margin-left:8px;font-size:0.95em;align-self: flex-start;" onclick="clearHistory()">🗑 Clear</button>
+        </div>
+        <div id="display" class="display" aria-live="polite" aria-label="Calculator display">0</div>
+        <div class="button-grid">
+          <button class="calc-btn btn-func" aria-label="Open parenthesis" onclick="input('(')" id="openParenBtn">(</button>
+          <button class="calc-btn btn-func" aria-label="Close parenthesis" onclick="input(')')" id="closeParenBtn">)</button>
+          <button class="calc-btn btn-func" aria-label="Percent" onclick="percent()" id="percentBtn">%</button>
+          <button class="calc-btn btn-op" aria-label="Divide" onclick="input('/')" id="divideBtn">÷</button>
+          <button class="calc-btn btn-ac" aria-label="All clear" onclick="clearDisplay()">AC</button>
+          
+          <button class="calc-btn btn-num" aria-label="Seven" onclick="input('7')">7</button>
+          <button class="calc-btn btn-num" aria-label="Eight" onclick="input('8')">8</button>
+          <button class="calc-btn btn-num" aria-label="Nine" onclick="input('9')">9</button>
+          <button class="calc-btn btn-op" aria-label="Multiply" onclick="input('*')">×</button>
+          <button class="calc-btn btn-func" aria-label="Square" onclick="unaryOp('square')" id="squareBtn">x²</button>
+          
+          <button class="calc-btn btn-num" aria-label="Four" onclick="input('4')">4</button>
+          <button class="calc-btn btn-num" aria-label="Five" onclick="input('5')">5</button>
+          <button class="calc-btn btn-num" aria-label="Six" onclick="input('6')">6</button>
+          <button class="calc-btn btn-op" aria-label="Subtract" onclick="input('-')">−</button>
+          <button class="calc-btn btn-func" aria-label="Square root" onclick="unaryOp('sqrt')" id="sqrtBtn">√</button>
+          
+          <button class="calc-btn btn-num" aria-label="One" onclick="input('1')">1</button>
+          <button class="calc-btn btn-num" aria-label="Two" onclick="input('2')">2</button>
+          <button class="calc-btn btn-num" aria-label="Three" onclick="input('3')">3</button>
+          <button class="calc-btn btn-op" aria-label="Add" onclick="input('+')">+</button>
+          <button class="calc-btn btn-func" aria-label="Logarithm" onclick="unaryOp('log')" id="logBtn">log</button>
+          
+          <button class="calc-btn btn-num" aria-label="Zero" onclick="input('0')">0</button>
+          <button class="calc-btn btn-num" aria-label="Decimal point" onclick="input('.')">.</button>
+          <button class="calc-btn btn-func" aria-label="Backspace" onclick="backspace()">⌫</button>
+          <button class="calc-btn btn-eq" style="grid-column: span 2;" aria-label="Equals" onclick="calculate()" id="eqBtn">=</button>
+        </div>
+      </div>
+      <script>
+let expr = '';
+let history = [];
+
+document.addEventListener('keydown', function(e) {
+  if (e.key >= '0' && e.key <= '9') input(e.key);
+  if (e.key === '.') input('.');
+  if (e.key === '+') input('+');
+  if (e.key === '-') input('-');
+  if (e.key === '*') input('*');
+  if (e.key === '/') input('/');
+  if (e.key === 'Enter' || e.key === '=') calculate();
+  if (e.key === 'Backspace') backspace();
+  if (e.key === '(') input('(');
+  if (e.key === ')') input(')');
+});
+
+function input(val) {
+  // Prevent operators at the start or after open parenthesis
+  if (['+', '-', '*', '/'].includes(val)) {
+    if (expr === '' || /[\+\-\*\/\(]$/.test(expr)) return;
+  }
+  // Prevent typing ()
+  if (val === ')') {
+    if (expr === '' || expr.slice(-1) === '(') return;
+    let open = (expr.match(/\(/g) || []).length;
+    let close = (expr.match(/\)/g) || []).length;
+    if (open <= close) return;
+  }
+  if (val === '(') {
+    // Prevent open parenthesis after a number or '.'
+    if (/[\d\.]$/.test(expr)) return;
+  }
+  if (val === '.') {
+    let match = expr.match(/(\d*\.\d*|\d+)(?!.*\d)/);
+    if (!match) {
+      expr += '0.';
+    } else if (match[0].includes('.')) {
+      return;
+    } else {
+      expr += '.';
+    }
+  } else if (val >= '0' && val <= '9') {
+    let parts = expr.split(/[\+\-\*\/\(\)]/);
+    let last = parts[parts.length - 1];
+    if (last === '0') {
+      expr = expr.slice(0, -1) + val;
+    } else if (/^0\d+/.test(last)) {
+      expr = expr.slice(0, -last.length) + val;
+    } else {
+      expr += val;
+    }
+  } else {
+    expr += val;
+  }
+  updateDisplay();
+  updateButtonStates();
+}
+
+function percent() {
+  let match = expr.match(/(\d+(\.\d+)?)(?!.*\d)/);
+  if (match) {
+    let num = match[0];
+    let percentValue = (parseFloat(num) / 100).toString();
+    expr = expr.replace(/(\d+(\.\d+)?)(?!.*\d)/, percentValue);
+    updateDisplay();
+    updateButtonStates();
+  }
+}
+
+function updateDisplay() {
+  const displayDiv = document.getElementById('display');
+  displayDiv.textContent = expr || '0';
+  // Auto-scroll to the right when content overflows
+  setTimeout(() => {
+    displayDiv.scrollLeft = displayDiv.scrollWidth;
+  }, 0);
+}
+
+function clearDisplay() {
+  expr = '';
+  updateDisplay();
+  updateButtonStates();
+}
+
+function backspace() {
+  expr = expr.slice(0, -1);
+  updateDisplay();
+  updateButtonStates();
+}
+
+function calculate() {
+  let result = '';
+  try {
+    if (!/^[\d+\-*/().% ]+$/.test(expr)) throw 'Unsafe input';
+    // Auto-close parentheses
+    let open = (expr.match(/\(/g) || []).length;
+    let close = (expr.match(/\)/g) || []).length;
+    if (open > close) {
+      expr += ')'.repeat(open - close);
+    }
+    // Prevent calculation if only open parenthesis or if last char is operator or open parenthesis
+    if (
+      expr === '' ||
+      expr === '(' ||
+      /^\(+$/.test(expr) || // Only open parentheses
+      /[\+\-\*\/\(]$/.test(expr)
+    ) {
+      result = 'Error';
+    } else {
+      result = eval(expr);
+      if (result === undefined) result = '';
+    }
+  } catch {
+    result = 'Error';
+  }
+  document.getElementById('display').textContent = result;
+  if (expr) history.push(expr + ' = ' + result);
+  updateHistory();
+  expr = '';
+  updateButtonStates();
+}
+
+function unaryOp(type) {
+  if (expr !== '') {
+    try {
+      if (!/^[\d+\-*/().% ]+$/.test(expr)) throw 'Unsafe input';
+      let num = eval(expr);
+      let res;
+      if (type === 'square') res = num * num;
+      if (type === 'sqrt') res = Math.sqrt(num);
+      if (type === 'log') res = Math.log10(num);
+      expr = isNaN(res) ? '' : res.toString();
+      updateDisplay();
+      updateButtonStates();
+    } catch {
+      expr = '';
+      updateDisplay();
+      updateButtonStates();
+    }
+  }
+}
+
+function updateHistory() {
+  const histDiv = document.getElementById('history');
+  histDiv.innerHTML = history.slice(-5).map(h => `<div>${h}</div>`).join('');
+  // Scroll to bottom so newest entry is visible
+  setTimeout(() => {
+    histDiv.scrollTop = histDiv.scrollHeight;
+  }, 0);
+}
+
+function clearHistory() {
+  history = [];
+  updateHistory();
+}
+
+function updateButtonStates() {
+  // Helper checks
+  const lastChar = expr.slice(-1);
+  const onlyOpenParen = expr === '(' || /^\(+$/.test(expr);
+  const isEmpty = expr === '';
+  const endsWithOpOrParen = /[\+\-\*\/\(]$/.test(expr);
+
+  // Check for invalid states: 0. at start, 0 at start, or after operator/parenthesis
+  const invalidZeroDot =
+    expr === '0.' ||
+    expr === '0' ||
+    /[\+\-\*\/\(]0\.$/.test(expr) ||
+    /[\+\-\*\/\(]0$/.test(expr);
+
+  // Disable percent if no number at end or if invalid zero-dot state
+  const percentDisabled =
+    !expr.match(/(\d+(\.\d+)?)(?!.*\d)/) ||
+    invalidZeroDot ||
+    endsWithOpOrParen;
+  document.getElementById('percentBtn').disabled = percentDisabled;
+
+  // Disable square, sqrt, log if expr is empty, only open parentheses, last char is '(',
+  // last char is operator, or invalid zero-dot state
+  const disableUnary =
+    isEmpty ||
+    onlyOpenParen ||
+    lastChar === '(' ||
+    /[\+\-\*\/]$/.test(expr) ||
+    invalidZeroDot;
+  document.getElementById('squareBtn').disabled = disableUnary;
+  document.getElementById('sqrtBtn').disabled = disableUnary;
+  document.getElementById('logBtn').disabled = disableUnary;
+
+  // Disable equals if expr is empty, only open parentheses, last char is operator or '(',
+  // or invalid zero-dot state
+  document.getElementById('eqBtn').disabled =
+    isEmpty ||
+    onlyOpenParen ||
+    endsWithOpOrParen ||
+    invalidZeroDot;
+
+  // Lock operator buttons if at start, after another operator, after open parenthesis,
+  // or invalid zero-dot state
+  const lockOp =
+    isEmpty ||
+    /[\+\-\*\/\(]$/.test(expr) ||
+    invalidZeroDot;
+  document.getElementById('divideBtn').disabled = lockOp;
+  document.querySelectorAll('.btn-op').forEach(btn => {
+    if (btn !== document.getElementById('divideBtn')) {
+      btn.disabled = lockOp;
+    }
+  });
+
+  // Lock close parenthesis if not needed or if last char is '(' or invalid zero-dot state
+  let open = (expr.match(/\(/g) || []).length;
+  let close = (expr.match(/\)/g) || []).length;
+  document.getElementById('closeParenBtn').disabled =
+    open <= close ||
+    lastChar === '(' ||
+    invalidZeroDot;
+
+  // Lock open parenthesis if last char is a number or '.' or invalid zero-dot state
+  document.getElementById('openParenBtn').disabled =
+    /[\d\.]$/.test(expr) ||
+    invalidZeroDot;
+}
+</script>
+</body>
+</html>
