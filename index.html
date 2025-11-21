@@ -146,6 +146,7 @@
       <script>
 let expr = '';
 let history = [];
+let evaluated = false;
 
 document.addEventListener('keydown', function(e) {
   if (e.key >= '0' && e.key <= '9') input(e.key);
@@ -161,6 +162,17 @@ document.addEventListener('keydown', function(e) {
 });
 
 function input(val) {
+  // If last action was evaluation and user types a digit or '.', start a new expression.
+  // Any other key (operator, percent, unary) will continue chaining on the result.
+  if (evaluated) {
+    if ((val >= '0' && val <= '9') || val === '.') {
+      expr = '';
+      evaluated = false;
+    } else {
+      // Keep expr (the last result) so operators/unary continue from it.
+      evaluated = false;
+    }
+  }
   // Prevent operators at the start or after open parenthesis
   if (['+', '-', '*', '/'].includes(val)) {
     if (expr === '' || /[\+\-\*\/\(]$/.test(expr)) return;
@@ -203,14 +215,14 @@ function input(val) {
 }
 
 function percent() {
-  let match = expr.match(/(\d+(\.\d+)?)(?!.*\d)/);
-  if (match) {
-    let num = match[0];
-    let percentValue = (parseFloat(num) / 100).toString();
-    expr = expr.replace(/(\d+(\.\d+)?)(?!.*\d)/, percentValue);
-    updateDisplay();
-    updateButtonStates();
-  }
+  // Insert a percent token (%) after the current number or closing parenthesis
+  const lastChar = expr.slice(-1);
+  if (!expr) return;
+  if (!(/\d$/.test(lastChar) || lastChar === ')')) return;
+  if (lastChar === '%') return; // don't duplicate
+  expr += '%';
+  updateDisplay();
+  updateButtonStates();
 }
 
 function updateDisplay() {
@@ -237,13 +249,15 @@ function backspace() {
 function calculate() {
   let result = '';
   try {
-    if (!/^[\d+\-*/().% ]+$/.test(expr)) throw 'Unsafe input';
+    if (!/^[\d+\-*/().%²√log ]+$/.test(expr)) throw 'Unsafe input';
+
     // Auto-close parentheses
     let open = (expr.match(/\(/g) || []).length;
     let close = (expr.match(/\)/g) || []).length;
     if (open > close) {
       expr += ')'.repeat(open - close);
     }
+
     // Prevent calculation if only open parenthesis or if last char is operator or open parenthesis
     if (
       expr === '' ||
@@ -253,33 +267,117 @@ function calculate() {
     ) {
       result = 'Error';
     } else {
-      result = eval(expr);
+      // Transform user tokens into JS-evalable code:
+      let s = expr;
+
+      // Replace prefix sqrt and log tokens
+      s = s.replace(/√\(/g, 'Math.sqrt(');
+      s = s.replace(/\blog\(/g, 'Math.log10(');
+
+      // Handle percent (%) and square (²) tokens robustly, including parenthesized operands
+      // Percent: replace occurrences of X% with (X/100)
+      while (s.includes('%')) {
+        const idx = s.indexOf('%');
+        let j = idx - 1;
+        if (s[j] === ')') {
+          // find matching '('
+          let depth = 0;
+          let start = j;
+          for (let k = j; k >= 0; k--) {
+            if (s[k] === ')') depth++;
+            if (s[k] === '(') depth--;
+            if (depth === 0) { start = k; break; }
+          }
+          const sub = s.slice(start, idx); // includes parentheses
+          s = s.slice(0, start) + '(' + sub + '/100)' + s.slice(idx + 1);
+        } else {
+          // number before %
+          let start = j;
+          while (start >= 0 && /[0-9.]/.test(s[start])) start--;
+          start++;
+          const num = s.slice(start, idx);
+          s = s.slice(0, start) + '(' + num + '/100)' + s.slice(idx + 1);
+        }
+      }
+
+      // Square: replace occurrences of X² with (X**2)
+      while (s.includes('²')) {
+        const idx = s.indexOf('²');
+        let j = idx - 1;
+        if (s[j] === ')') {
+          // find matching '('
+          let depth = 0;
+          let start = j;
+          for (let k = j; k >= 0; k--) {
+            if (s[k] === ')') depth++;
+            if (s[k] === '(') depth--;
+            if (depth === 0) { start = k; break; }
+          }
+          const sub = s.slice(start, idx); // includes parentheses
+          s = s.slice(0, start) + '(' + sub + '**2)' + s.slice(idx + 1);
+        } else {
+          // number before ²
+          let start = j;
+          while (start >= 0 && /[0-9.]/.test(s[start])) start--;
+          start++;
+          const num = s.slice(start, idx);
+          s = s.slice(0, start) + '(' + num + '**2)' + s.slice(idx + 1);
+        }
+      }
+
+      result = eval(s);
       if (result === undefined) result = '';
     }
   } catch {
     result = 'Error';
   }
+  // Treat non-finite numeric results as errors
+  if (typeof result === 'number' && !isFinite(result)) result = 'Error';
   document.getElementById('display').textContent = result;
   if (expr) history.push(expr + ' = ' + result);
   updateHistory();
-  expr = '';
+  // If evaluation succeeded, make the result the current expression so user can continue chaining.
+  if (result !== 'Error' && result !== '') {
+    expr = String(result);
+    evaluated = true;
+  } else {
+    expr = '';
+    evaluated = false;
+  }
   updateButtonStates();
 }
 
+// Initialize UI on load so buttons (equals, operators, etc.) are correctly enabled/disabled
+document.addEventListener('DOMContentLoaded', () => {
+  updateDisplay();
+  updateButtonStates();
+});
+
 function unaryOp(type) {
-  if (expr !== '') {
-    try {
-      if (!/^[\d+\-*/().% ]+$/.test(expr)) throw 'Unsafe input';
-      let num = eval(expr);
-      let res;
-      if (type === 'square') res = num * num;
-      if (type === 'sqrt') res = Math.sqrt(num);
-      if (type === 'log') res = Math.log10(num);
-      expr = isNaN(res) ? '' : res.toString();
+  // Insert tokens instead of computing immediately:
+  if (type === 'square') {
+    // append square token to the last operand / parenthesized group
+    // only if expression ends with a number or ')'
+    const lastChar = expr.slice(-1);
+    if (/\d$/.test(lastChar) || lastChar === ')') {
+      expr += '²';
       updateDisplay();
       updateButtonStates();
-    } catch {
-      expr = '';
+    }
+  }
+  if (type === 'sqrt') {
+    // insert sqrt token prefix (√() ) — user will type number inside parentheses
+    // only allow where an open-paren is allowed (start or after operator/paren)
+    if (expr === '' || /[\+\-\*\/\(]$/.test(expr)) {
+      expr += '√(';
+      updateDisplay();
+      updateButtonStates();
+    }
+  }
+  if (type === 'log') {
+    // insert log( as prefix
+    if (expr === '' || /[\+\-\*\/\(]$/.test(expr)) {
+      expr += 'log(';
       updateDisplay();
       updateButtonStates();
     }
@@ -307,31 +405,28 @@ function updateButtonStates() {
   const isEmpty = expr === '';
   const endsWithOpOrParen = /[\+\-\*\/\(]$/.test(expr);
 
-  // Check for invalid states: 0. at start, 0 at start, or after operator/parenthesis
-  const invalidZeroDot =
-    expr === '0.' ||
-    expr === '0' ||
-    /[\+\-\*\/\(]0\.$/.test(expr) ||
-    /[\+\-\*\/\(]0$/.test(expr);
+  // treat only a trailing incomplete decimal like "0." or "(0." as invalid for some buttons;
+  // a standalone "0" should allow operators/equals/unary/percent.
+  const invalidZeroDot = /(^|[\+\-\*\/\(])0\.$/.test(expr);
 
-  // Disable percent if no number at end or if invalid zero-dot state
+  const endsWithNumber = /\d$/.test(expr);
+  const endsWithNumberOrParen = endsWithNumber || lastChar === ')';
+
+  // Disable percent if not ending in a number or ')' or if invalid zero-dot state or already '%'
   const percentDisabled =
-    !expr.match(/(\d+(\.\d+)?)(?!.*\d)/) ||
+    !endsWithNumberOrParen ||
     invalidZeroDot ||
-    endsWithOpOrParen;
+    lastChar === '%';
   document.getElementById('percentBtn').disabled = percentDisabled;
 
-  // Disable square, sqrt, log if expr is empty, only open parentheses, last char is '(',
-  // last char is operator, or invalid zero-dot state
-  const disableUnary =
-    isEmpty ||
-    onlyOpenParen ||
-    lastChar === '(' ||
-    /[\+\-\*\/]$/.test(expr) ||
-    invalidZeroDot;
-  document.getElementById('squareBtn').disabled = disableUnary;
-  document.getElementById('sqrtBtn').disabled = disableUnary;
-  document.getElementById('logBtn').disabled = disableUnary;
+  // Square: only valid when expression ends with a number or ')'
+  document.getElementById('squareBtn').disabled =
+    !endsWithNumberOrParen || invalidZeroDot;
+
+  // sqrt/log: valid to insert at start or after an operator/open-paren
+  const canInsertPrefix = isEmpty || /[\+\-\*\/\(]$/.test(expr);
+  document.getElementById('sqrtBtn').disabled = !canInsertPrefix || invalidZeroDot;
+  document.getElementById('logBtn').disabled = !canInsertPrefix || invalidZeroDot;
 
   // Disable equals if expr is empty, only open parentheses, last char is operator or '(',
   // or invalid zero-dot state
